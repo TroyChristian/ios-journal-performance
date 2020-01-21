@@ -17,6 +17,40 @@ class CoreDataImporter {
     func sync(entries: [EntryRepresentation], completion: @escaping (Error?) -> Void = { _ in }) {
         
         self.context.perform {
+            
+           print("Sync started")
+           let identifiersToFetch = entries.compactMap { $0.identifier }
+           let repsByID = Dictionary(uniqueKeysWithValues: zip(identifiersToFetch, entries))
+           var entriesToCreate = repsByID
+           
+           let fetchRequest: NSFetchRequest<Entry> = Entry.fetchRequest()
+           fetchRequest.predicate = NSPredicate(format: "identifier IN %@", identifiersToFetch)
+           let context = CoreDataStack.shared.container.newBackgroundContext()
+           
+           context.performAndWait {
+               do {
+                 let existingEntries = try context.fetch(fetchRequest)
+                   
+                   for entry in existingEntries {
+                       guard let identifier = entry.identifier,
+                        let representation = repsByID[identifier] else {continue}
+                        
+                          
+                    
+                    self.update(entry:entry, with: representation)
+                           
+                            
+                    
+                   }
+                   
+                   for representation in entriesToCreate.values {
+                       Entry(entryRepresentation: representation, context: context)
+                   }
+                   try context.save()
+               } catch {
+                   return
+               }
+            }
             for entryRep in entries {
                 guard let identifier = entryRep.identifier else { continue }
                 
@@ -30,6 +64,9 @@ class CoreDataImporter {
             completion(nil)
         }
     }
+    
+    
+   
     
     private func update(entry: Entry, with entryRep: EntryRepresentation) {
         entry.title = entryRep.title
